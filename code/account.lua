@@ -72,4 +72,4 @@ ngx.var.account_name = nil
 ngx.var.file_name = nil
 ngx.var.tail = nil
 ngx.var.ext = nil
-return ngx.exec(path)
+return ngx.exec(path, ngx.req.get_uri_args())
