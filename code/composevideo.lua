@@ -62,7 +62,7 @@ local function composeVideo()
     local args = cjson.decode(ngx.req.get_body_data())
     local respData = {}
     local fullDir,outDir,cmd,tmpName,outName = '','','','',''
-    local osufDir = 'video_multilingual'
+    local osufDir = "video_multilingual"
     if #args > 5 then
         ngx.exit(ngx.HTTP_BAD_REQUEST)
     end
@@ -112,4 +112,62 @@ local function composeVideo()
     return ngx.print(cjson.encode(respData))
 end
 
-composeVideo()
+local function pureVideo()
+    ngx.req.read_body();
+    local args = cjson.decode(ngx.req.get_body_data())
+    local respData = {}
+    local outDir,cmd,outName,selffile = '','','',''
+    local url = ngx.var.scheme .."://".. ngx.var.host ..':'.. ngx.var.server_port ..'/'
+    local osufDir = "video_pure"
+    if #args > 10 then
+        ngx.exit(ngx.HTTP_BAD_REQUEST)
+    end
+    for _, video in pairs(args) do
+        local uPath = getUrlPath(video)
+        local vDir,vName,suffix = getDirFileInfo(uPath)
+        local tmp,vDir = string.match(vDir, "(.*)(/%d+/%d+)$")
+        local originv = ''
+        local del = false
+        if vDir == nil then
+            vDir = '/100'
+        elseif tmp == nil then
+            selffile = ngx.var.root_path ..vDir ..'/'..vName .. suffix
+        end
+        outDir = ngx.var.root_path ..'/'.. osufDir .. vDir ..'/'
+        mk_dir(outDir)
+        
+        outName = md5.sumhexa(uPath .. osufDir)
+        outName = outName .. suffix
+        if file_exists(outDir .. outName) then
+            respData[video] = { ["path"]=url.. osufDir .. vDir ..'/'.. outName }
+        else
+            if selffile~= '' && file_exists(selffile) then
+                originv = selffile
+            else
+                originv = downFile(video, outDir)
+            end
+            --local originv = downFile(video, outDir)
+            if originv == '' then
+                respData[video] = { ["error"]="Failed to obtain origin vedio" }
+            else
+                cmd = 'ffmpeg -i '.. originv ..' -vcodec copy -an -sn -y '.. outDir .. outName
+                cmd = cmd ..' > /dev/null 2>&1'
+                local res = os.execute(cmd)
+                if res ~= 0 then
+                    respData[video] = { ["error"]="clean failed" }
+                else
+                    respData[video] = { ["path"]=url.. osufDir .. vDir ..'/'.. outName }
+                end
+                os.remove(originv)
+            end
+        end
+    end
+    ngx.header['Content-Type'] = 'application/json; charset=utf-8'
+    return ngx.print(cjson.encode(respData))
+end
+
+if ngx.var.uri == "/composev" then
+    composeVideo()
+else
+    pureVideo()
+end
